@@ -383,7 +383,13 @@ class ChatOpenAI(BaseChatModel):
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {**params, **kwargs}
         if self.streaming:
-            inner_completion = ""
+            inner_completion += token or ""
+            _function_call = stream_resp["choices"][0]["delta"].get("function_call")
+            if _function_call:
+                if function_call is None:
+                    function_call = _function_call
+                else:
+                    function_call["arguments"] += _function_call["arguments"]
             role = "assistant"
             params["stream"] = True
             async for stream_resp in await acompletion_with_retry(
@@ -395,7 +401,11 @@ class ChatOpenAI(BaseChatModel):
                 if run_manager:
                     await run_manager.on_llm_new_token(token)
             message = _convert_dict_to_message(
-                {"content": inner_completion, "role": role}
+                {
+                    "content": inner_completion, 
+                    "role": role,
+                    "function_call": function_call,
+                }
             )
             return ChatResult(generations=[ChatGeneration(message=message)])
         else:
